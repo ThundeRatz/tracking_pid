@@ -92,59 +92,14 @@ class SectionInterpolation(object):
         self.length_of_section = np.linalg.norm(self._delta)
         self.length_of_section_ang = np.linalg.norm(self._delta_yaw)
 
-        self.time_x_acc_decc = self._x_vel/self._x_acc_decc  # Time during (de) and acceleration phases t = v/a
-        self.length_x_acc_decc =  0.5*self._x_acc_decc*(self.time_x_acc_decc*self.time_x_acc_decc) # Translation during acceleration phase x = 0.5a*t^2
-        self.length_x_vel = self.length_of_section - self.length_x_acc_decc - self.length_x_acc_decc # Translation during constant velocity phase
-        self.time_x_vel  = self.length_x_vel/self._x_vel  # Time during constant velocity phase t = v/a
-        self._x_vel_adjusted = self._x_vel
-
-        if self.time_x_vel < 0:  # No constant acceleration phase. Recompute (de)-acceleration phase
-            self.length_x_acc_decc = 0.5*self.length_of_section
-            self.time_x_acc_decc = math.sqrt(2*self.length_x_acc_decc/self._x_acc_decc) # x = 0.5a*t^2 -> 2x/a = t^2 -> t = sqrt(2x/a)
-            self._x_vel_adjusted = self._x_acc_decc*self.time_x_acc_decc
-            self.length_x_vel = 0.0
-            self.time_x_vel = 0.0
-
-        self.time_yaw_acc_decc = self._yaw_vel/self._yaw_acc_decc  # Time during acceleration phase t = v/a
-        self.length_yaw_acc_decc =  0.5*self._yaw_acc_decc*(self.time_yaw_acc_decc*self.time_yaw_acc_decc) # Translation during acceleration phase x = 0.5a*t^2
-        self.length_yaw_vel = self.length_of_section_ang - self.length_yaw_acc_decc - self.length_yaw_acc_decc # Translation during constant velocity phase
-        self.time_yaw_vel  = self.length_yaw_vel/self._yaw_vel  # Time during constant velocity phase t = v/a
-        self._yaw_vel_adjusted = self._yaw_vel
-
-        if self.time_yaw_vel < 0:  # No constant acceleration phase. Recompute (de)-acceleration phase
-            self.length_yaw_acc_decc = 0.5*self.length_of_section_ang
-            self.time_yaw_acc_decc = math.sqrt(2*self.length_yaw_acc_decc/self._yaw_acc_decc) # x = 0.5a*t^2 -> 2x/a = t^2 -> t = sqrt(2x/a)
-            self._yaw_vel_adjusted = self._yaw_acc_decc*self.time_yaw_acc_decc
-            self.length_yaw_vel = 0.0
-            self.time_yaw_vel = 0.0
-
-
-        self.duration_for_section_x = self.time_x_acc_decc + self.time_x_vel + self.time_x_acc_decc
-        self.duration_for_section_yaw = self.time_yaw_acc_decc + self.time_yaw_vel + self.time_yaw_acc_decc
+        # Don't use acceleration on each section
+        self.duration_for_section_x = self.length_of_section / self._x_vel
+        self.duration_for_section_yaw = self.length_of_section_ang / self._yaw_vel
         self.duration_for_section = rospy.Duration(max(self.duration_for_section_x,self.duration_for_section_yaw))
 
-        rospy.logdebug("self._x_acc_decc: %f",self._x_acc_decc)
-        rospy.logdebug("self._x_vel: %f",self._x_vel)
-        rospy.logdebug("self.length_of_section: %f",self.length_of_section)
-        rospy.logdebug("self.time_x_acc_decc: %f",self.time_x_acc_decc)
-        rospy.logdebug("self.time_x_vel: %f",self.time_x_vel)
-        rospy.logdebug("self.length_x_acc_decc: %f",self.length_x_acc_decc)
-        rospy.logdebug("self.length_x_vel: %f",self.length_x_vel)
         rospy.logdebug("self.duration_for_section_x: %f",self.duration_for_section_x)
-
-        rospy.logdebug("self._yaw_acc_decc: %f",self._yaw_acc_decc)
-        rospy.logdebug("self._yaw_vel: %f",self._yaw_vel)
-        rospy.logdebug("self.length_of_section_ang: %f",self.length_of_section_ang)
-        rospy.logdebug("self.time_yaw_acc_decc: %f",self.time_yaw_acc_decc)
-        rospy.logdebug("self.time_yaw_vel: %f",self.time_yaw_vel)
-        rospy.logdebug("self.length_yaw_acc_decc: %f",self.length_yaw_acc_decc)
-        rospy.logdebug("self.length_yaw_vel: %f",self.length_yaw_vel)
         rospy.logdebug("self.duration_for_section_yaw: %f",self.duration_for_section_yaw)
-
-
         rospy.logdebug("self.duration_for_section: %f",self.duration_for_section.to_sec())
-
-
 
         self.section_start_time = start_time
         self.x_progress = 0.0
@@ -178,9 +133,10 @@ class SectionInterpolation(object):
         next_pose.pose.orientation.z = quaternion[2]
         next_pose.pose.orientation.w = quaternion[3]
 
+        tp = traj_point()
+        tp.pose = next_pose
 
-
-        return next_pose
+        return tp
 
     def interpolate_with_acceleration(self, current_time):
         """
@@ -524,7 +480,7 @@ class InterpolatorNode(object):
             rospy.loginfo("Instantaneous completion of 0-length section")
             progress_on_section = 1
 
-        tp = self._current_section.interpolate_with_acceleration(rospy.Time.now())
+        tp = self._current_section.interpolate(progress_on_section)
         tp.pose.header.stamp = event.current_real
 
 
