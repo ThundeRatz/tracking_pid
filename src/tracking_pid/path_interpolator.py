@@ -7,6 +7,8 @@ from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 from std_msgs.msg import Bool
 from std_srvs.srv import SetBool
+from thundervolt_msgs.msg import EntityStateStamped
+from thundervolt_msgs.msg import EntityState
 from tracking_pid.cfg import TargetVelocityConfig
 from tracking_pid.msg import traj_point, FollowPathAction, FollowPathGoal, FollowPathResult, FollowPathFeedback
 from visualization_msgs.msg import Marker
@@ -264,9 +266,12 @@ class InterpolatorNode(object):
         self._timer = None  # type: rospy.Timer
 
         self._latest_subgoal_pose = None  # type: PoseStamped
+        self._latest_tp = None
 
         self._paused = False
         self._pause_sub = rospy.Subscriber("pause", Bool, self._process_pause, queue_size=1)
+
+        self._dist_paused = False
 
         self._target_x_vel = 1.0 # To be overridden by parameters
         self._target_x_acc = 0.2
@@ -282,6 +287,12 @@ class InterpolatorNode(object):
         self._as.register_goal_callback(self._accept_goal)
         self._as.start()
 
+        self._robot_state = EntityState()
+        self._robot_state_sub = rospy.Subscriber("robot_state", EntityStateStamped, self._entity_state_callback)
+
+        self.pause_threshold = rospy.get_param("~pid_pause_threshold")
+        self.hysteresis = rospy.get_param("~pid_hysteresis")
+        
         rospy.loginfo("%s initialized", rospy.get_name())
 
     def start_path(self):
@@ -292,6 +303,7 @@ class InterpolatorNode(object):
         rospy.logdebug("stop_path()")
         self._timer.shutdown()
         self._timer = None
+        self._latest_tp = None
 
     def continue_path(self, start_time=None):
         # if we're un-paused and we were busy with a section: we resume the path from the last goal send:
@@ -319,6 +331,29 @@ class InterpolatorNode(object):
             rospy.loginfo("Unpausing path_interpolator")
             resume_time = rospy.Time.now() - rospy.Duration(1.0 / self._rate)  # Prevent sending last goal again
             self._paused = bool_msg.data
+            self.continue_path(start_time=resume_time)
+
+    def _process_dist_pause(self):
+        if self._latest_tp is None:
+            return
+
+        inner_rad = self.pause_threshold - self.hysteresis/2
+        outer_rad = self.pause_threshold + self.hysteresis/2
+
+        robot_pos = np.array([self._robot_state.pose.x, self._robot_state.pose.y])
+        marker_pos = np.array([self._latest_tp.pose.pose.position.x, self._latest_tp.pose.pose.position.y])
+
+        robot_marker_vector = robot_pos - marker_pos
+        robot_marker_dist = np.linalg.norm(robot_marker_vector)
+
+        if not self._dist_paused and robot_marker_dist > outer_rad:
+            rospy.loginfo("Pausing path_interpolator due to distance")
+            rospy.logwarn("No acceleration limits implemented when dist pausing!")
+            self._dist_paused = True
+        elif self._dist_paused and robot_marker_dist < inner_rad:
+            rospy.loginfo("Unpausing path_interpolator due to distance")
+            resume_time = rospy.Time.now() - rospy.Duration(1.0 / self._rate)  # Prevent sending last goal again
+            self._dist_paused = False
             self.continue_path(start_time=resume_time)
 
     def _process_velocity(self, config, _):
@@ -441,6 +476,13 @@ class InterpolatorNode(object):
             rospy.logdebug_throttle(5.0, "Path_interpolator is paused")
             return
 
+        self._process_dist_pause()
+        if self._dist_paused:
+            self.__publish_marker(self._latest_tp.pose)
+            self.trajectory_pub.publish(self._latest_tp)
+            rospy.logdebug_throttle(5.0, "Path_interpolator is paused due to distance")
+            return
+
         if not self._current_section or rospy.Time.now() > self._current_section.section_end_time:  # or when past end time of current section, go to next
             try:
                 start, end = self._sections.pop(0)
@@ -488,6 +530,7 @@ class InterpolatorNode(object):
 
         # Remember the last interpolated sub-goal on our way to the next waypoint in the Path
         self._latest_subgoal_pose = tp.pose
+        self._latest_tp = tp
 
         self.__publish_marker(tp.pose)
         self.trajectory_pub.publish(tp)
@@ -506,9 +549,9 @@ class InterpolatorNode(object):
         m.pose = pose_stamped.pose
         m.header = pose_stamped.header
         m.type = Marker.SPHERE
-        m.scale.x = 0.2
-        m.scale.y = 0.2
-        m.scale.z = 0.2
+        m.scale.x = 0.1
+        m.scale.y = 0.1
+        m.scale.z = 0.1
         m.action = Marker.ADD
         m.ns = "interpolated"
         self._visualization_pub.publish(m)
@@ -534,3 +577,7 @@ class InterpolatorNode(object):
             self.reconfigure_client.update_configuration({"l": new_l})
 
             self.enable_srv(True)
+            
+    def _entity_state_callback(self, entity_msg):
+        self._robot_state = entity_msg.entity
+        
