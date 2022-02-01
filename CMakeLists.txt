@@ -24,6 +24,7 @@ find_package(catkin REQUIRED
     tf2_geometry_msgs
     tf2_ros
     visualization_msgs
+    thundervolt_msgs
 )
 
 catkin_python_setup()
@@ -75,6 +76,7 @@ catkin_package(
     tf2_geometry_msgs
     tf2_ros
     visualization_msgs
+    thundervolt_msgs
 )
 
 add_executable(controller src/controller.cpp src/controller_node.cpp)

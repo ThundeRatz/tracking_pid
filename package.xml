@@ -38,6 +38,7 @@
   <depend>tf2_ros</depend>
   <depend>tf</depend>
   <depend>visualization_msgs</depend>
+  <depend>thundervolt_msgs</depend>
   <exec_depend>message_runtime</exec_depend>
   <exec_depend>nav_core</exec_depend>
   <test_depend>mobile_robot_simulator</test_depend>
