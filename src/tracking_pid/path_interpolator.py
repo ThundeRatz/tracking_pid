@@ -372,6 +372,28 @@ class InterpolatorNode(object):
         self.continue_path()
         return config
 
+    def _project_on_path(self, path_poses, pose):
+        """
+        This function is called when a new path is received and tries to project the position of the  interpolator
+        from the old path to the new one.
+
+        Parameters
+        -----------
+        path_poses: geometry_msgs/PoseStamped
+            Vector that contains all the poses from the new path.
+        pose: geometry_msgs/PoseStamped 
+            Pose that indicates the last position of the interpolator
+
+        Returns
+        ----------
+        Projection: geometry_msgs/PoseStamped
+            Position that is the projection of the interpolator on the new path
+        Next_pose_index: int
+            Index of the pose vector that indicates the next pose from the path where the interpolator (on the path) should go
+        """
+        pass
+    
+
     def _accept_path_from_topic(self, path_msg):
         """
         When receiving a path on a topic, just call our own action server!
