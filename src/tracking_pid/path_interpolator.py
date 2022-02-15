@@ -397,7 +397,7 @@ class InterpolatorNode(object):
 
     def _project_on_path(self, path_poses, pose):
         """
-        This function is called when a new path is received and tries to project the position of the  interpolator
+        This function is called when a new path is received and tries to project the position of the interpolator
         from the old path to the new one.
 
         Parameters
@@ -487,6 +487,10 @@ class InterpolatorNode(object):
         This ensures canceling/aborting/preemption etc behave as they should
         :return: None
         """
+        if self._path_poses is None:
+            latest_tp_projection, initial_index = self._project_on_path(path_msg, self.latest_tp.pose)
+            new_path = latest_tp_projection + path_msg[initial_index:]
+            path_msg = new_path
         rospy.loginfo("Path received on topic, calling action to execute")
         client = actionlib.SimpleActionClient("follow_path", FollowPathAction)
         client.wait_for_server()
