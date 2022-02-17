@@ -434,52 +434,46 @@ class InterpolatorNode(object):
         closest_pose = np.array([path_poses[min_index].pose.position.x, path_poses[min_index].pose.position.y])
         
         # Definir o segmento onde projetar
-        segment = (None, None)
-        next_pose = np.array([path_poses[min_index + 1].pose.position.x, path_poses[min_index +1].pose.position.y])
-        previous_pose = np.array([path_poses[min_index - 1].pose.position.x, path_poses[min_index - 1].pose.position.y])
-        
-        previous_u_dir = versor(closest_pose - previous_pose)
-        next_u_dir = versor(next_pose - closest_pose)
-        pose_vector = np_pose_position - closest_pose
-        pose_dir = versor(pose_vector)
+        next_pose_index = None
 
         if min_index == 0:
-            segment = (min_index, min_index + 1)
-            proj_dir = next_u_dir
+            next_pose_index = min_index + 1
+            next_pose = np.array([path_poses[min_index + 1].pose.position.x, path_poses[min_index + 1].pose.position.y])
+            proj_dir = versor(next_pose - closest_pose)
         elif min_index == len(path_poses) - 1:
-            segment = (min_index - 1, min_index)
-            proj_dir = -previous_u_dir
+            next_pose_index = min_index
+            previous_pose = np.array([path_poses[min_index - 1].pose.position.x, path_poses[min_index - 1].pose.position.y])
+            proj_dir = -versor(closest_pose - previous_pose)
         else:
-
-            # side_multiplier = -float(np.sign(vectors_angle(next_u_dir, previous_u_dir)))
+            next_pose = np.array([path_poses[min_index + 1].pose.position.x, path_poses[min_index + 1].pose.position.y])
+            previous_pose = np.array([path_poses[min_index - 1].pose.position.x, path_poses[min_index - 1].pose.position.y])
             
-            # previous_v_dir = rotate(previous_u_dir, side_multiplier * np.pi / 2)
-            # next_v_dir = rotate(next_u_dir, side_multiplier * np.pi / 2)
+            previous_u_dir = versor(closest_pose - previous_pose)
+            next_u_dir = versor(next_pose - closest_pose)
+            pose_vector = np_pose_position - closest_pose
+            pose_dir = versor(pose_vector)
 
             if np.absolute(vectors_angle(pose_dir, next_u_dir)) < np.pi / 2:
-                segment = (min_index, min_index + 1)
+                next_pose_index = min_index + 1
                 proj_dir = next_u_dir
             elif np.absolute(vectors_angle(pose_dir, previous_u_dir)) > np.pi / 2:
-                segment = (min_index - 1, min_index)
+                next_pose_index = min_index
                 proj_dir = -previous_u_dir
             else:
                 return (path_poses[min_index], min_index + 1)
                 
-            # previous_next_area = np.absolute(np.linalg.det(np.cross(next_v_dir, previous_v_dir)) / 2)
-            # previous_pose_area = np.absolute(np.linalg.det(np.cross(pose_dir, previous_v_dir)) / 2)
-            # next_pose_area = np.absolute(np.linalg.det(np.cross(next_v_dir, pose_dir)) / 2)
-
-            # # Checa para ver se a projeção deve cair exatamente em cima do ponto da trajetória
-            # if previous_pose_area < previous_next_area and next_pose_area < previous_next_area:
-            #     return (path_poses[min_index], min_index + 1)
-        
-        # Projeção 
+        # Projeção
         projected_pose = closest_pose + np.dot(pose_vector, proj_dir)
-        #TO-DO: transformar em PoseStamped
-            
-
-
         
+        # Transforma em PoseStamped
+        projected_pose_stamped = PoseStamped()
+        projected_pose_stamped.header = pose.header
+        projected_pose_stamped.pose.orientation = pose.pose.orientation
+        projected_pose_stamped.pose.point.x = projected_pose[0]
+        projected_pose_stamped.pose.point.y = projected_pose[1]
+        projected_pose_stamped.pose.point.z = 0
+        
+        return projected_pose_stamped, next_pose_index
 
     def _accept_path_from_topic(self, path_msg):
         """
