@@ -481,9 +481,10 @@ class InterpolatorNode(object):
         This ensures canceling/aborting/preemption etc behave as they should
         :return: None
         """
-        if self._path_poses is None:
-            latest_tp_projection, initial_index = self._project_on_path(path_msg, self.latest_tp.pose)
-            new_path = latest_tp_projection + path_msg[initial_index:]
+        if self._path_poses is None and self._latest_tp is not None:
+            latest_tp_projection, initial_index = self._project_on_path(path_msg, self._latest_tp.pose)
+            new_path = path_msg[(initial_index):]
+            # new_path = latest_tp_projection + path_msg[initial_index:]
             path_msg = new_path
         rospy.loginfo("Path received on topic, calling action to execute")
         client = actionlib.SimpleActionClient("follow_path", FollowPathAction)
@@ -585,9 +586,10 @@ class InterpolatorNode(object):
 
         self._process_dist_pause()
         if self._dist_paused:
-            self.__publish_marker(self._latest_tp.pose)
-            self.trajectory_pub.publish(self._latest_tp)
             rospy.logdebug_throttle(5.0, "Path_interpolator is paused due to distance")
+            if self._latest_tp is not None:
+                self.__publish_marker(self._latest_tp.pose)
+                self.trajectory_pub.publish(self._latest_tp)
             return
 
         if not self._current_section or rospy.Time.now() > self._current_section.section_end_time:  # or when past end time of current section, go to next
