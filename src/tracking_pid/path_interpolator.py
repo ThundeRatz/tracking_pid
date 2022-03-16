@@ -291,6 +291,8 @@ class InterpolatorNode(object):
         self._latest_subgoal_pose = None  # type: PoseStamped
         self._latest_tp = None
 
+        self._latest_valid_tp = None
+
         self._paused = False
         self._pause_sub = rospy.Subscriber("pause", Bool, self._process_pause, queue_size=1)
 
@@ -439,10 +441,12 @@ class InterpolatorNode(object):
         if min_index == 0:
             next_pose_index = min_index + 1
             next_pose = np.array([path_poses[min_index + 1].pose.position.x, path_poses[min_index + 1].pose.position.y])
+            pose_vector = next_pose - closest_pose
             proj_dir = versor(next_pose - closest_pose)
         elif min_index == len(path_poses) - 1:
             next_pose_index = min_index
             previous_pose = np.array([path_poses[min_index - 1].pose.position.x, path_poses[min_index - 1].pose.position.y])
+            pose_vector = closest_pose - previous_pose
             proj_dir = -versor(closest_pose - previous_pose)
         else:
             next_pose = np.array([path_poses[min_index + 1].pose.position.x, path_poses[min_index + 1].pose.position.y])
@@ -469,9 +473,9 @@ class InterpolatorNode(object):
         projected_pose_stamped = PoseStamped()
         projected_pose_stamped.header = pose.header
         projected_pose_stamped.pose.orientation = pose.pose.orientation
-        projected_pose_stamped.pose.point.x = projected_pose[0]
-        projected_pose_stamped.pose.point.y = projected_pose[1]
-        projected_pose_stamped.pose.point.z = 0
+        projected_pose_stamped.pose.position.x = projected_pose[0]
+        projected_pose_stamped.pose.position.y = projected_pose[1]
+        projected_pose_stamped.pose.position.z = 0
         
         return projected_pose_stamped, next_pose_index
 
@@ -479,14 +483,29 @@ class InterpolatorNode(object):
         """
         When receiving a path on a topic, just call our own action server!
         This ensures canceling/aborting/preemption etc behave as they should
-        :return: None
+
+        Parameters
+        -----------
+        path_msg: nav_msgs/Path.msg
+            A Path type variable, consisting of a header and a geometry_msgs/PoseStamped 
+            list, which contains all the poses from the path received from path topic.
+
+        Returns
+        ----------
         """
-        if self._path_poses is None and self._latest_tp is not None:
-            latest_tp_projection, initial_index = self._project_on_path(path_msg, self._latest_tp.pose)
-            new_path = path_msg[(initial_index):]
-            # new_path = latest_tp_projection + path_msg[initial_index:]
+        if self._path_poses is None and self._latest_valid_tp is not None:
+            latest_tp_projection, initial_index = self._project_on_path(path_msg.poses, self._latest_valid_tp.pose)
+
+            # Create modified path
+            new_path = Path()
+            new_path.header = path_msg.header
+            new_path.poses.append(latest_tp_projection)
+
+            for index in range(initial_index, len(path_msg.poses)):
+                new_path.poses.append(path_msg.poses[index])
+
             path_msg = new_path
-        rospy.loginfo("Path received on topic, calling action to execute")
+
         client = actionlib.SimpleActionClient("follow_path", FollowPathAction)
         client.wait_for_server()
         client.send_goal(FollowPathGoal(path=path_msg))
@@ -640,6 +659,9 @@ class InterpolatorNode(object):
         # Remember the last interpolated sub-goal on our way to the next waypoint in the Path
         self._latest_subgoal_pose = tp.pose
         self._latest_tp = tp
+
+        if self._latest_tp is not None:
+            self._latest_valid_tp = self._latest_tp           
 
         self.__publish_marker(tp.pose)
         self.trajectory_pub.publish(tp)
