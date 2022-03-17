@@ -140,7 +140,8 @@ class SectionInterpolation(object):
         :param progress_ratio: How far along the section are we?
         :type progress_ratio: float
         :return: an interpolation between the Section's start and end
-        :rtype: PoseStamped
+        :rtype: traj_point
+        See: https://github.com/nobleo/tracking_pid/blob/master/msg/traj_point.msg
         """
         # target_x = start_x + delta_x * progress_on_section
         next_xyz = self._start_xyz + self._delta * progress_ratio
@@ -506,6 +507,7 @@ class InterpolatorNode(object):
 
             path_msg = new_path
 
+        rospy.loginfo("Path received on topic, calling action to execute")
         client = actionlib.SimpleActionClient("follow_path", FollowPathAction)
         client.wait_for_server()
         client.send_goal(FollowPathGoal(path=path_msg))
