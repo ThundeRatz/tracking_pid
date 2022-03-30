@@ -148,10 +148,11 @@ class SectionInterpolation(object):
         next_yaw = self._start_yaw + self._delta_yaw * progress_ratio
         next_pose = PoseStamped()
         # next_pose.header.stamp is to be filled by the caller
+        # ===== TESTING =====
         next_pose.header.frame_id = self.section_start_pose_stamped.header.frame_id
-        next_pose.pose.position.x = next_xyz[X]
-        next_pose.pose.position.y = next_xyz[Y]
-        next_pose.pose.position.z = next_xyz[Z]
+        next_pose.pose.position.x = self._end_xyz[X] # old: next_xyz[X]
+        next_pose.pose.position.y = self._end_xyz[Y] # old: next_xyz[Y]
+        next_pose.pose.position.z = self._end_xyz[Z] # old: next_xyz[Z]
         # Compute orientation. PID can use it for holonomic robots
         quaternion = tf.transformations.quaternion_from_euler(0, 0, next_yaw)
         next_pose.pose.orientation.x = quaternion[0]
@@ -254,9 +255,6 @@ class SectionInterpolation(object):
         tp.pose.pose.orientation.z = quaternion[2]
         tp.pose.pose.orientation.w = quaternion[3]
         tp.velocity.angular.z = np.sign(self._delta_yaw) * self.current_yaw_vel
-
-
-
 
         return tp
 
@@ -372,7 +370,7 @@ class InterpolatorNode(object):
         robot_marker_vector = robot_pos - marker_pos
         robot_marker_dist = np.linalg.norm(robot_marker_vector)
 
-        if not self._dist_paused and robot_marker_dist > outer_rad:
+        if not self._dist_paused and robot_marker_dist > outer_rad and False: # Temporary (avoid pausing the robot during tests)
             rospy.loginfo("Pausing path_interpolator due to distance")
             rospy.logwarn("No acceleration limits implemented when dist pausing!")
             self._dist_paused = True
@@ -500,8 +498,7 @@ class InterpolatorNode(object):
             # Create modified path
             new_path = Path()
             new_path.header = path_msg.header
-            new_path.poses.append(latest_tp_projection)
-
+            # new_path.poses.append(latest_tp_projection)
             for index in range(initial_index, len(path_msg.poses)):
                 new_path.poses.append(path_msg.poses[index])
 
@@ -607,6 +604,7 @@ class InterpolatorNode(object):
 
         self._process_dist_pause()
         if self._dist_paused:
+            rospy.logwarn("Path_interpolator is paused due to distance")
             rospy.logdebug_throttle(5.0, "Path_interpolator is paused due to distance")
             if self._latest_tp is not None:
                 self.__publish_marker(self._latest_tp.pose)
